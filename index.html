@@ -1,0 +1,417 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Broker Account IP 釋放工具(請警慎使用)</title>
+  <style>
+    :root{
+      --bg: #f7fafc;
+      --card: #ffffff;
+      --text: #111827;
+      --muted: #6b7280;
+      --primary: #0ea5e9;
+      --primary-600: #0284c7;
+      --ok: #16a34a;
+      --warn: #f59e0b;
+      --error: #dc2626;
+      --border: #e5e7eb;
+      --shadow: 0 2px 12px rgba(0,0,0,.06);
+    }
+    @media (prefers-color-scheme: dark){
+      :root{
+        --bg: #0b1220;
+        --card: #0f172a;
+        --text: #e5e7eb;
+        --muted: #9ca3af;
+        --primary: #38bdf8;
+        --primary-600: #0ea5e9;
+        --ok: #22c55e;
+        --warn: #fbbf24;
+        --error: #f87171;
+        --border: #1f2937;
+        --shadow: 0 2px 12px rgba(0,0,0,.35);
+      }
+    }
+    *{ box-sizing: border-box; }
+    body{ font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", "Helvetica Neue", Arial; background: var(--bg); color: var(--text); margin:0; padding:24px;}
+    .container{ max-width: 1000px; margin: 0 auto; display: grid; gap: 16px; }
+    .header{ display:flex; align-items:center; justify-content: space-between; gap:12px; }
+    h1{ font-size: 20px; margin:0; }
+    .cards{ display:grid; grid-template-columns: 1fr 1fr; gap:16px; }
+    .card{ background: var(--card); border:1px solid var(--border); border-radius:14px; box-shadow: var(--shadow); padding:16px; }
+    .card h2{ font-size:14px; margin:0 0 10px; color: var(--muted); text-transform: uppercase; letter-spacing:.04em;}
+    .grid{ display:grid; grid-template-columns: 140px 1fr; gap:10px 12px; align-items:center; }
+    label{ font-size:13px; color:var(--muted); }
+    input, textarea{ width:100%; border:1px solid var(--border); background: transparent; color:var(--text); padding:10px 12px; border-radius:10px; font-size:14px; outline:none; }
+    input:focus, textarea:focus{ border-color: var(--primary); box-shadow: 0 0 0 3px color-mix(in oklab, var(--primary) 20%, transparent); }
+    textarea{ min-height: 160px; resize: vertical; }
+    .row-full{ grid-template-columns: 1fr; }
+    .muted{ color:var(--muted); font-size:12px; }
+    .actions{ display:flex; align-items:center; gap:10px; flex-wrap: wrap; }
+    .btn{ appearance:none; border:none; border-radius:10px; padding:10px 16px; font-size:14px; cursor:pointer; color:white; background: var(--primary); transition: .2s; }
+    .btn:hover{ background: var(--primary-600); }
+    .btn:disabled{ opacity:.6; cursor:not-allowed; }
+    .btn-secondary{ background: #475569; }
+    .inline{ display:flex; align-items:center; gap:8px; font-size:12px; color:var(--muted); }
+    .table-card{ overflow: hidden; padding:20px; }
+    .table-wrap{ overflow:auto; }
+    table{ width:100%; border-collapse: collapse; font-size: 13px; }
+    th, td{ padding:10px 12px; border-bottom:1px solid var(--border); white-space: nowrap; }
+    th{ text-align:left; font-weight:600; color:var(--muted); background: color-mix(in oklab, var(--card) 88%, var(--bg)); position: sticky; top:0; }
+    tr:hover td{ background: color-mix(in oklab, var(--card) 94%, var(--bg)); }
+    .badge{ display:inline-flex; align-items:center; gap:6px; font-size:12px; padding:4px 8px; border-radius:999px; border:1px solid var(--border); }
+    .badge.ok{ color: var(--ok); border-color: color-mix(in oklab, var(--ok) 60%, var(--border)); }
+    .badge.warn{ color: var(--warn); border-color: color-mix(in oklab, var(--warn) 60%, var(--border)); }
+    .badge.error{ color: var(--error); border-color: color-mix(in oklab, var(--error) 60%, var(--border)); }
+    .progress{ height:8px; border-radius:999px; background: color-mix(in oklab, var(--card) 70%, var(--bg)); overflow:hidden; border:1px solid var(--border);}
+    .progress > span{ display:block; height:100%; width:0%; background: var(--primary); transition: width .2s ease; }
+    .toast{ position: fixed; right: 16px; bottom: 16px; background: var(--card); border:1px solid var(--border); box-shadow: var(--shadow); border-radius: 12px; padding: 10px 12px; font-size:13px; display:none;}
+    .toast.show{ display:block; }
+    .spinner{ width:16px; height:16px; border-radius:50%; border:2px solid color-mix(in oklab, var(--card) 40%, var(--bg)); border-top-color: var(--card); border-left-color: var(--card); animation: spin .8s linear infinite; }
+    @keyframes spin{ to{ transform: rotate(360deg); } }
+    .mono{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>Broker Account IP 釋放工具(請警慎使用)</h1>
+      <div class="actions">
+        <button id="clearSaved" class="btn btn-secondary" type="button">清除保存</button>
+      </div>
+    </div>
+
+    <div class="cards">
+      <!-- 登入設定 -->
+      <section class="card">
+        <h2>請登入 Stranity Admin Panel 資訊</h2>
+        <div class="grid">
+          <label for="account">帳號 (Email)</label>
+          <input id="account" placeholder="例如：mini2728@hotmail.com" />
+
+          <label for="password">密碼</label>
+          <input id="password" type="password" placeholder="輸入密碼" />
+
+          <div></div>
+          <div class="inline">
+            <input id="remember" type="checkbox" checked>
+            <label for="remember">記住帳密（存於本機瀏覽器）</label>
+          </div>
+        </div>
+        <p class="muted" style="margin-top:8px;">按「開始處理」後會先登入取得 accessToken，再查詢與送單。</p>
+      </section>
+
+      <!-- 輸入清單 -->
+      <section class="card">
+        <h2>處理清單(請輸入broker_account)</h2>
+        <div class="grid row-full">
+          <textarea id="brokerList" placeholder="每行一筆 broker_account"></textarea>
+        </div>
+        <div class="actions" style="margin-top:12px;">
+          <button id="runBtn" class="btn">
+            <span class="btn-label">開始處理</span>
+            <span class="btn-loading" style="display:none;align-items:center;gap:8px;">
+              <span class="spinner"></span> 處理中…
+            </span>
+          </button>
+          <div class="progress" style="flex:1; min-width: 160px;">
+            <span id="bar" style="width:0%"></span>
+          </div>
+          <span id="saveStatus" class="muted"></span>
+        </div>
+      </section>
+    </div>
+
+    <!-- 結果表 -->
+    <section class="card table-card">
+      <h2>結果</h2>
+      <div class="table-wrap">
+        <table id="resultTable">
+          <thead>
+            <tr>
+              <th data-key="broker">Broker Account</th>
+              <th data-key="user_id">User ID</th>
+              <th data-key="account_id">Account ID</th>
+              <th data-key="ticket">Ticket</th>
+              <th data-key="status">狀態</th>
+              <th data-key="time">時間</th>
+              <th data-key="message">訊息</th>
+            </tr>
+          </thead>
+          <tbody id="tbody"></tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
+  <!-- Toast -->
+  <div id="toast" class="toast"></div>
+
+  <script type="module">
+    // ===== LocalStorage Keys =====
+    const LS = {
+      account: 'baip.account',
+      password: 'baip.password',
+      remember: 'baip.remember',
+      brokers: 'baip.brokers',
+    };
+
+    // ===== 工具 =====
+    const $ = (id) => document.getElementById(id);
+    const accountEl = $('account');
+    const passwordEl = $('password');
+    const rememberEl = $('remember');
+    const brokerList = $('brokerList');
+    const runBtn = $('runBtn');
+    const bar = $('bar');
+    const saveStatus = $('saveStatus');
+    const clearSavedBtn = $('clearSaved');
+    const tbody = $('tbody');
+    const resultTable = $('resultTable');
+    const btnLabel = runBtn.querySelector('.btn-label');
+    const btnLoading = runBtn.querySelector('.btn-loading');
+
+    function toast(msg){
+      const el = $('toast');
+      el.textContent = msg;
+      el.classList.add('show');
+      setTimeout(()=> el.classList.remove('show'), 1800);
+    }
+
+    function setSavingHint(msg){
+      saveStatus.textContent = msg;
+      setTimeout(()=> saveStatus.textContent = '', 1500);
+    }
+
+    function isoNowWithTZ(){
+      const d = new Date();
+      const pad = (n)=> String(n).padStart(2,'0');
+      const y = d.getFullYear(), m = pad(d.getMonth()+1), day = pad(d.getDate());
+      const hh = pad(d.getHours()), mm = pad(d.getMinutes()), ss = pad(d.getSeconds());
+      const offMin = -d.getTimezoneOffset(); // +08:00 => 480
+      const sign = offMin >= 0 ? '+' : '-';
+      const oh = pad(Math.floor(Math.abs(offMin)/60));
+      const om = pad(Math.abs(offMin)%60);
+      return `${y}-${m}-${day}T${hh}:${mm}:${ss}${sign}${oh}:${om}`;
+    }
+
+    function setBar(percent){ bar.style.width = `${Math.max(0, Math.min(100, percent))}%`; }
+    function setLoading(loading){
+      runBtn.disabled = loading;
+      btnLabel.style.display = loading ? 'none' : '';
+      btnLoading.style.display = loading ? 'inline-flex' : 'none';
+    }
+
+    // ===== API =====
+    function login(account, password) {
+      const url = 'https://console.stranity.org/api/public/user/login';
+      return axios.post(url, { account, password }, { headers: { 'Content-Type': 'application/json' } })
+        .then(res => res?.data?.result?.accessToken || null)
+        .catch(() => null);
+    }
+
+    function getAccounts(token){
+      const url = 'https://console.stranity.org/api/admin/v2/account';
+      return axios.get(url, { headers: { Authorization: `Bearer ${token}` } })
+        .then(res => (res.data.result || []).sort((a,b)=>a.id-b.id))
+        .catch(() => []);
+    }
+
+    function getBrokerAccounts(token){
+      const url = 'https://console.stranity.org/api/admin/v2/broker_account';
+      return axios.get(url, { headers: { Authorization: `Bearer ${token}` } })
+        .then(res => (res.data.result || []).sort((a,b)=>a.id-b.id))
+        .catch(() => []);
+    }
+
+    function postRevokeAccountIP(token, user_id, account_id) {
+      const url = 'https://console.stranity.org/api/admin/v2/tickets/revoke_account_ip';
+      const payload = {
+        call: "revoke_account_ip",
+        host_id: 101,
+        emergency: 0,
+        scheduled_at: isoNowWithTZ(),
+        payload: { user_id, account_id }
+      };
+      return axios.post(url, payload, {
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
+      }).then(res => res?.data?.result ?? null)
+        .catch(() => null);
+    }
+
+    function postApprove(token, id) {
+      const url = `https://console.stranity.org/api/admin/v2/tickets/${id}/approve`;
+      const payload = { emergency: 1, scheduled_at: isoNowWithTZ() };
+      return axios.post(url, payload, {
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
+      }).then(() => true).catch(() => false);
+    }
+
+    // ===== 資料快取 =====
+    let ACCOUNTS = [];
+    let BROKER_ACCOUNTS = [];
+
+    function getUserId(broker_account){
+      const item = BROKER_ACCOUNTS.find(x => x.broker_account === broker_account);
+      return item?.user_id ?? null;
+    }
+    function getAccountId(broker_account){
+      const item = ACCOUNTS.find(x =>
+        x.order_account === broker_account &&
+        x.ip_addr && x.vm_ip_addr && x.vm_ip_cidr && x.vm_ip_gateway
+      );
+      return item?.id ?? null;
+    }
+
+    // ===== LocalStorage =====
+    function loadSaved(){
+      const savedAccount = localStorage.getItem(LS.account) || '';
+      const savedPassword = localStorage.getItem(LS.password) || '';
+      const savedRemember = localStorage.getItem(LS.remember);
+      const savedBrokers = localStorage.getItem(LS.brokers) || '';
+      accountEl.value = savedAccount;
+      passwordEl.value = savedPassword;
+      rememberEl.checked = savedRemember === null ? true : savedRemember === '1';
+      brokerList.value = savedBrokers;
+    }
+    function saveCredsIfNeeded(){
+      if (rememberEl.checked){
+        localStorage.setItem(LS.account, accountEl.value.trim());
+        localStorage.setItem(LS.password, passwordEl.value);
+        localStorage.setItem(LS.remember, '1');
+        setSavingHint('帳密已保存於本機。');
+      } else {
+        clearCreds();
+        setSavingHint('未保存帳密。');
+      }
+    }
+    function clearCreds(){
+      localStorage.removeItem(LS.account);
+      localStorage.removeItem(LS.password);
+      localStorage.setItem(LS.remember, '0');
+    }
+    function saveBrokers(){
+      localStorage.setItem(LS.brokers, brokerList.value);
+      setSavingHint('清單已保存。');
+    }
+
+    // 載入
+    loadSaved();
+    brokerList.addEventListener('input', saveBrokers);
+    rememberEl.addEventListener('change', () => {
+      if (!rememberEl.checked){ clearCreds(); toast('已清除帳密保存'); }
+      else saveCredsIfNeeded();
+    });
+    clearSavedBtn.addEventListener('click', () => {
+      clearCreds(); localStorage.removeItem(LS.brokers); brokerList.value = '';
+      toast('已清除所有本機保存');
+    });
+
+    // ===== 表格工具 =====
+    function addRow(row){
+      const tr = document.createElement('tr');
+      const badge = (type, text) => `<span class="badge ${type}">${text}</span>`;
+      tr.innerHTML = `
+        <td class="mono">${row.broker ?? ''}</td>
+        <td class="mono">${row.user_id ?? ''}</td>
+        <td class="mono">${row.account_id ?? ''}</td>
+        <td class="mono">${row.ticket ?? ''}</td>
+        <td>${row.status === 'ok' ? badge('ok','成功') :
+              row.status === 'skip' ? badge('warn','略過') :
+              row.status === 'pending' ? badge('warn','處理中') :
+              badge('error','失敗')}</td>
+        <td class="mono">${row.time ?? ''}</td>
+        <td>${row.message ?? ''}</td>
+      `;
+      tbody.appendChild(tr);
+    }
+
+    // 簡單排序
+    let sortState = { key: 'time', asc: false };
+    function sortTableBy(key){
+      const rows = Array.from(tbody.querySelectorAll('tr'));
+      const idx = { broker:0, user_id:1, account_id:2, ticket:3, status:4, time:5, message:6 }[key];
+      rows.sort((a,b)=>{
+        const va = a.children[idx].textContent.trim();
+        const vb = b.children[idx].textContent.trim();
+        if (!isNaN(+va) && !isNaN(+vb)) return (Number(va)-Number(vb)) * (sortState.asc?1:-1);
+        return va.localeCompare(vb) * (sortState.asc?1:-1);
+      });
+      tbody.innerHTML = '';
+      rows.forEach(r=> tbody.appendChild(r));
+    }
+    resultTable.querySelectorAll('th').forEach(th=>{
+      th.style.cursor = 'pointer';
+      th.addEventListener('click', ()=>{
+        const key = th.dataset.key;
+        sortState.asc = sortState.key === key ? !sortState.asc : true;
+        sortState.key = key;
+        sortTableBy(key);
+      });
+    });
+
+    // ===== 主流程 =====
+    const parseList = (raw) => raw.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+
+    runBtn.addEventListener('click', async ()=>{
+      const account = accountEl.value.trim();
+      const password = passwordEl.value;
+      const brokers = parseList(brokerList.value);
+
+      if (!account || !password){ toast('請先輸入帳號與密碼'); return; }
+      if (!brokers.length){ toast('請輸入 broker_account 清單'); return; }
+
+      // 保存
+      saveCredsIfNeeded(); saveBrokers();
+
+      // Reset UI
+      setBar(0); setLoading(true); tbody.innerHTML = '';
+
+      // Login
+      const token = await login(account, password);
+      if (!token){ addRow({ status:'error', time: isoNowWithTZ(), message:'登入失敗，請確認帳密' }); setLoading(false); return; }
+      addRow({ status:'ok', time: isoNowWithTZ(), message:'登入成功' });
+
+      // Fetch refs
+      [ACCOUNTS, BROKER_ACCOUNTS] = await Promise.all([ getAccounts(token), getBrokerAccounts(token) ]);
+      addRow({ status:'ok', time: isoNowWithTZ(), message:`載入參考資料完成 accounts:${ACCOUNTS.length}、broker_accounts:${BROKER_ACCOUNTS.length}` });
+
+      // Process
+      for (let i=0;i<brokers.length;i++){
+        const broker = brokers[i];
+        const user_id = getUserId(broker);
+        const account_id = getAccountId(broker);
+
+        if (user_id == null || account_id == null){
+          addRow({ broker, user_id, account_id, status:'skip', time: isoNowWithTZ(), message:'找不到 user/account 或缺 IP 綁定資訊' });
+          setBar(((i+1)/brokers.length)*100);
+          continue;
+        }
+
+        addRow({ broker, user_id, account_id, status:'pending', time: isoNowWithTZ(), message:'建立釋放工單…' });
+        const ticket = await postRevokeAccountIP(token, user_id, account_id);
+        if (!ticket){
+          addRow({ broker, user_id, account_id, status:'error', time: isoNowWithTZ(), message:'建立工單失敗' });
+          setBar(((i+1)/brokers.length)*100);
+          continue;
+        }
+
+        const approved = await postApprove(token, ticket);
+        addRow({
+          broker, user_id, account_id, ticket,
+          status: approved ? 'ok' : 'error',
+          time: isoNowWithTZ(),
+          message: approved ? '核准成功' : '核准失敗'
+        });
+
+        setBar(((i+1)/brokers.length)*100);
+      }
+
+      setLoading(false);
+      toast('處理完成');
+    });
+  </script>
+</body>
+</html>
