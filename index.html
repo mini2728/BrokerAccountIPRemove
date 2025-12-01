@@ -259,8 +259,7 @@
     }
     function getAccountId(broker_account){
       const item = ACCOUNTS.find(x =>
-        x.order_account === broker_account &&
-        x.ip_addr && x.vm_ip_addr && x.vm_ip_cidr && x.vm_ip_gateway
+        x.order_account === broker_account && x.ip_addr
       );
       return item?.id ?? null;
     }
