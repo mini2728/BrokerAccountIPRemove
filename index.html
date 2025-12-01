@@ -77,7 +77,7 @@
 <body>
   <div class="container">
     <div class="header">
-      <h1>Broker Account IP 釋放工具(請警慎使用) V2.0</h1>
+      <h1>Broker Account IP 釋放工具(請警慎使用) V3.0</h1>
       <div class="actions">
         <button id="clearSaved" class="btn btn-secondary" type="button">清除保存</button>
       </div>
@@ -212,15 +212,15 @@
         .catch(() => null);
     }
 
-    function getAccounts(token){
-      const url = 'https://console.stranity.org/api/admin/v2/account';
+    function getAllocated_IP(token){
+      const url = 'https://console.stranity.org/api/admin/account/allocated_ip';
       return axios.get(url, { headers: { Authorization: `Bearer ${token}` } })
         .then(res => (res.data.result || []).sort((a,b)=>a.id-b.id))
         .catch(() => []);
     }
 
-    function getBrokerAccounts(token){
-      const url = 'https://console.stranity.org/api/admin/v2/broker_account';
+    function getAccounts(token){
+      const url = 'https://console.stranity.org/api/admin/v2/account';
       return axios.get(url, { headers: { Authorization: `Bearer ${token}` } })
         .then(res => (res.data.result || []).sort((a,b)=>a.id-b.id))
         .catch(() => []);
@@ -250,13 +250,9 @@
     }
 
     // ===== 資料快取 =====
+    let Allocated_IP = [];
     let ACCOUNTS = [];
-    let BROKER_ACCOUNTS = [];
 
-    function getUserId(broker_account){
-      const item = BROKER_ACCOUNTS.find(x => x.broker_account === broker_account);
-      return item?.user_id ?? null;
-    }
     function getAccountId(broker_account){
       const item = ACCOUNTS.find(x =>
         x.order_account === broker_account && x.ip_addr
@@ -374,20 +370,21 @@
       addRow({ status:'ok', time: isoNowWithTZ(), message:'登入成功' });
 
       // Fetch refs
-      [ACCOUNTS, BROKER_ACCOUNTS] = await Promise.all([ getAccounts(token), getBrokerAccounts(token) ]);
-      addRow({ status:'ok', time: isoNowWithTZ(), message:`載入參考資料完成 accounts:${ACCOUNTS.length}、broker_accounts:${BROKER_ACCOUNTS.length}` });
+      [Allocated_IP, ACCOUNTS] = await Promise.all([ getAllocated_IP(token), getAccounts(token) ]);
+      addRow({ status:'ok', time: isoNowWithTZ(), message:`載入參考資料完成 Allocated_IP:${Allocated_IP.length}、ACCOUNTS:${ACCOUNTS.length}` });
 
       // Process
       for (let i=0;i<brokers.length;i++){
         const broker = brokers[i];
-        const user_id = getUserId(broker);
-        const account_id = getAccountId(broker);
-
-        if (user_id == null || account_id == null){
-          addRow({ broker, user_id, account_id, status:'skip', time: isoNowWithTZ(), message:'找不到 user/account 或缺 IP 綁定資訊' });
+        const item = Allocated_IP.find(x => x.broker_account === broker );
+        if(item == null){
+          addRow({ broker, user_id:'', account_id:'', status:'skip', time: isoNowWithTZ(), message:'IP 已解除綁定資訊' });
           setBar(((i+1)/brokers.length)*100);
           continue;
         }
+        
+        const user_id = item.user_id;
+        const account_id = getAccountId(broker);
 
         addRow({ broker, user_id, account_id, status:'pending', time: isoNowWithTZ(), message:'建立釋放工單…' });
         const ticket = await postRevokeAccountIP(token, user_id, account_id);
